@@ -1,5 +1,7 @@
 # dconv
 
+[![Rust Tests](https://github.com/USERNAME/dconv/actions/workflows/rust-tests.yml/badge.svg)](https://github.com/USERNAME/dconv/actions/workflows/rust-tests.yml)
+
 **dconv** is a lightweight command-line utility that converts between timestamps and RFC 3339 date-time strings. It detects the input format automatically and performs bidirectional conversions, making it easy to work with different time formats in scripts or manually from the terminal.
 
 ---
@@ -120,7 +122,7 @@ mv dconv /usr/local/bin/
 
 ## 🪪 License
 
-This project is licensed under the **MIT License**. See the `LICENSE` file for more details.
+This project is licensed under the **Apache-2.0 License**. See the `LICENSE` file for more details.
 
 ---
 

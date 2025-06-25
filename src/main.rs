@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use anyhow::{Context, Result, bail};
-use chrono::{DateTime, Local};
+use chrono::{DateTime, Local, TimeZone, offset::FixedOffset};
 use clap::Parser;
 
 #[derive(Parser, Debug)]
@@ -20,10 +20,7 @@ fn main() -> Result<()> {
 }
 
 /// Formats a DateTime in both UTC and with the specified offset
-fn format_datetime<T: chrono::TimeZone>(
-    date_time: &DateTime<T>,
-    local_offset: &chrono::offset::FixedOffset,
-) -> String {
+fn format_datetime<T: TimeZone>(date_time: &DateTime<T>, local_offset: &FixedOffset) -> String {
     format!(
         "{}\n{}",
         date_time.to_rfc3339(),
@@ -32,7 +29,7 @@ fn format_datetime<T: chrono::TimeZone>(
 }
 
 /// Converts a DateTime to a timestamp in milliseconds
-fn datetime_to_timestamp<T: chrono::TimeZone>(date_time: &DateTime<T>) -> String {
+fn datetime_to_timestamp<T: TimeZone>(date_time: &DateTime<T>) -> String {
     date_time.timestamp_millis().to_string()
 }
 
@@ -48,7 +45,7 @@ fn convert(input: &str) -> Result<String> {
         .context("Failed to parse timestamp")?;
 
         // Get the local timezone offset
-        Ok(format_datetime(&date_time, &Local::now().offset()))
+        Ok(format_datetime(&date_time, Local::now().offset()))
     } else {
         let date_time =
             DateTime::parse_from_rfc3339(input).context("Error parsing rfc3339 string")?;

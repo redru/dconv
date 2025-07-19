@@ -160,7 +160,7 @@ mod tests {
     }
 
     #[test]
-    fn test_inputdatetype_from_str() {
+    fn test_input_date_type_from_str() {
         // RFC3339
         let dt = InputDateType::from_str("2025-06-24T20:18:00Z").unwrap();
         match dt {

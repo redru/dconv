@@ -4,11 +4,9 @@ on:
   workflow_dispatch:
 
 jobs:
-  release:
-    name: Release Job
-    runs-on: macos-latest
-    permissions:
-      contents: write
+  check-prerequisites:
+    name: Check Prerequisites
+    runs-on: ubuntu-latest
     steps:
       - name: Exit if not on main branch
         run: |
@@ -16,9 +14,6 @@ jobs:
             echo "This workflow only runs on the main branch."
             exit 1
           fi
-
-      - name: Checkout repository
-        uses: actions/checkout@v4
 
       - name: Check previous workflow run conclusion
         env:
@@ -34,6 +29,16 @@ jobs:
             echo "Tests are not passing. Stopping execution."
             exit 1
           fi
+
+  release-macos:
+    name: Release for Mac OS
+    runs-on: macos-latest
+    needs: check-prerequisites
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Get version from Cargo.toml
         id: get_version

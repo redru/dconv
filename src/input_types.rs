@@ -57,7 +57,13 @@ impl FromStr for Operation {
         }
 
         let (symbol, value, unit) = split_operation_input(s)?;
-        let duration = to_duration(value, unit)?;
+
+        let duration = match unit {
+            Unit::Seconds => Duration::seconds(value),
+            Unit::Minutes => Duration::minutes(value),
+            Unit::Hours => Duration::hours(value),
+            Unit::Days => Duration::days(value),
+        };
 
         match symbol {
             Symbol::Plus => Ok(Operation::Sum(duration)),
@@ -84,15 +90,6 @@ fn split_operation_input(input: &str) -> Result<(Symbol, i64, Unit), String> {
     let unit = Unit::from_str(unit_str)?;
 
     Ok((symbol, value, unit))
-}
-
-fn to_duration(value: i64, unit: Unit) -> Result<Duration, String> {
-    match unit {
-        Unit::Seconds => Ok(Duration::seconds(value)),
-        Unit::Minutes => Ok(Duration::minutes(value)),
-        Unit::Hours => Ok(Duration::hours(value)),
-        Unit::Days => Ok(Duration::days(value)),
-    }
 }
 
 #[derive(Debug, Clone, Copy)]

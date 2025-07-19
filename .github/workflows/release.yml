@@ -1,0 +1,78 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  release:
+    name: Release Job
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Exit if not on main branch
+        run: |
+          if [ "${GITHUB_REF##*/}" != "main" ]; then
+            echo "This workflow only runs on the main branch."
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check previous workflow run conclusion
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          response=$(curl -s \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/redru/dconv/actions/workflows/tests.yml/runs?branch=main&per_page=1")
+          conclusion=$(echo "$response" | jq -r '.workflow_runs[0].conclusion')
+          echo "Previous workflow conclusion: $conclusion"
+          if [ "$conclusion" != "success" ]; then
+            echo "Tests are not passing. Stopping execution."
+            exit 1
+          fi
+
+      - name: Get version from Cargo.toml
+        id: get_version
+        run: |
+          version=$(grep '^version' Cargo.toml | head -n1 | sed -E 's/version *= *"([^"]+)"/\1/')
+          echo "version=$version" >> $GITHUB_OUTPUT
+
+      - name: Install Rust 1.87.0
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.87.0
+          rustup target add aarch64-apple-darwin
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          source "$HOME/.cargo/env"
+
+      - name: Build release binary
+        run: cargo build --release --target aarch64-apple-darwin
+
+      - name: Create tar.gz archive
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          BIN_PATH="target/aarch64-apple-darwin/release/dconv"
+          ARCHIVE_NAME="dconv-${VERSION}-macos-arm64.tar.gz"
+          tar -czvf "$(dirname "$BIN_PATH")/$ARCHIVE_NAME" -C "$(dirname "$BIN_PATH")" "$(basename "$BIN_PATH")"
+
+      - name: Create git tag
+        env:
+          VERSION: ${{ steps.get_version.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "v${VERSION}"
+          git push origin "v${VERSION}"
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.get_version.outputs.version }}
+        run: |
+          ARCHIVE_PATH="target/aarch64-apple-darwin/release/dconv-${VERSION}-macos-arm64.tar.gz"
+          TAG="v${VERSION}"
+          TITLE="v${VERSION} - macOS arm64"
+          gh release create "$TAG" "$ARCHIVE_PATH" --title "$TITLE" --notes "Release version ${VERSION}"

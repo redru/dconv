@@ -1,0 +1,90 @@
+name: Update Brew
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "GitHub release tag to use for updating homebrew-dconv"
+        required: true
+      dry_run:
+        description: "If true, skip the version check and do not update anything"
+        required: false
+        default: "true"
+
+jobs:
+  update-brew:
+    name: Update Brew
+    runs-on: ubuntu-latest
+    steps:
+      - name: Exit if not on main branch
+        run: |
+          if [ "${GITHUB_REF##*/}" != "main" ]; then
+            echo "This workflow only runs on the main branch."
+            exit 1
+          fi
+
+      - name: Download selected release asset
+        env:
+          RELEASE_TAG: ${{ github.event.inputs.release_tag }}
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+          RELEASE_URL="https://api.github.com/repos/${{ github.repository }}/releases/tags/$RELEASE_TAG"
+          ASSET_URL=$(curl -s $RELEASE_URL | jq -r --arg VERSION "$VERSION" '.assets[] | select(.name == "dconv-" + $VERSION + "-macos-arm64.tar.gz") | .browser_download_url')
+          if [ -z "$ASSET_URL" ]; then
+            echo "Release asset dconv-${VERSION}-macos-arm64.tar.gz not found!"
+            exit 1
+          fi
+          curl -L -o selected_release_asset "$ASSET_URL"
+
+      - name: Checkout homebrew-dconv repository
+        uses: actions/checkout@v4
+        with:
+          repository: redru/homebrew-dconv
+          token: ${{ secrets.HOMEBREW_DCONV }}
+          path: homebrew-dconv
+
+      - name: Verify Formula/dconv.rb url is not already at selected version
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        env:
+          RELEASE_TAG: ${{ github.event.inputs.release_tag }}
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+          FORMULA_PATH="homebrew-dconv/Formula/dconv.rb"
+          EXPECTED_URL="https://github.com/redru/dconv/releases/download/v${VERSION}/dconv-${VERSION}-macos-arm64.tar.gz"
+          if grep -q "url \"${EXPECTED_URL}\"" "$FORMULA_PATH"; then
+            echo "Formula already at version ${VERSION}."
+            exit 1
+          fi
+
+      - name: Update Formula/dconv.rb with new url and sha256
+        env:
+          RELEASE_TAG: ${{ github.event.inputs.release_tag }}
+        run: |
+          set -e
+          # Extract version (strip leading 'v' if present)
+          VERSION="${RELEASE_TAG#v}"
+          FORMULA_PATH="homebrew-dconv/Formula/dconv.rb"
+          # Compute sha256 of the downloaded asset
+          SHA256=$(shasum -a 256 selected_release_asset | awk '{print $1}')
+          # Construct new url
+          NEW_URL="https://github.com/redru/dconv/releases/download/v${VERSION}/dconv-${VERSION}-macos-arm64.tar.gz"
+          # Update url in Formula
+          sed -i.bak -E "s|^  url \".*\"|  url \"${NEW_URL}\"|" "$FORMULA_PATH"
+          # Update sha256 in Formula
+          sed -i.bak -E "s|^  sha256 \".*\"|  sha256 \"${SHA256}\"|" "$FORMULA_PATH"
+          rm "$FORMULA_PATH.bak"
+          echo "Updated Formula/dconv.rb:"
+          cat "$FORMULA_PATH"
+
+      - name: Commit and push Formula update
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        env:
+          RELEASE_TAG: ${{ github.event.inputs.release_tag }}
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+          cd homebrew-dconv
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/dconv.rb
+          git commit -m "Release version ${VERSION}"
+          git push

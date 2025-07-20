@@ -30,10 +30,55 @@ jobs:
             exit 1
           fi
 
+  create-release:
+    name: Create release
+    runs-on: macos-14
+    needs: check-prerequisites
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get version from Cargo.toml
+        id: get_version
+        run: |
+          version=$(grep '^version' Cargo.toml | head -n1 | sed -E 's/version *= *"([^"]+)"/\1/')
+          echo "version=$version" >> $GITHUB_OUTPUT
+
+      - name: Check if release already exists
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.get_version.outputs.version }}
+        run: |
+          TAG="v${VERSION}"
+          if gh release view "$TAG" &>/dev/null; then
+            echo "Release $TAG already exists. Stopping execution."
+            exit 1
+          fi
+
+      - name: Create git tag
+        env:
+          VERSION: ${{ steps.get_version.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "v${VERSION}"
+          git push origin "v${VERSION}"
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.get_version.outputs.version }}
+        run: |
+          TAG="v${VERSION}"
+          TITLE="v${VERSION}"
+          gh release create "$TAG" --title "$TITLE" --notes "Release version ${VERSION}"
+
   release-macos:
     name: Release for Mac OS
-    runs-on: macos-latest
-    needs: check-prerequisites
+    runs-on: macos-14
+    needs: create-release
     permissions:
       contents: write
     steps:
@@ -63,21 +108,53 @@ jobs:
           ARCHIVE_NAME="dconv-${VERSION}-macos-arm64.tar.gz"
           tar -czvf "$(dirname "$BIN_PATH")/$ARCHIVE_NAME" -C "$(dirname "$BIN_PATH")" "$(basename "$BIN_PATH")"
 
-      - name: Create git tag
-        env:
-          VERSION: ${{ steps.get_version.outputs.version }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag "v${VERSION}"
-          git push origin "v${VERSION}"
-
-      - name: Create GitHub Release
+      - name: Upload to GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.get_version.outputs.version }}
         run: |
           ARCHIVE_PATH="target/aarch64-apple-darwin/release/dconv-${VERSION}-macos-arm64.tar.gz"
           TAG="v${VERSION}"
-          TITLE="v${VERSION} - macOS arm64"
-          gh release create "$TAG" "$ARCHIVE_PATH" --title "$TITLE" --notes "Release version ${VERSION}"
+          gh release upload "$TAG" "$ARCHIVE_PATH" --clobber
+
+  release-linux:
+    name: Release for Linux
+    runs-on: ubuntu-22.04
+    needs: create-release
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get version from Cargo.toml
+        id: get_version
+        run: |
+          version=$(grep '^version' Cargo.toml | head -n1 | sed -E 's/version *= *"([^"]+)"/\1/')
+          echo "version=$version" >> $GITHUB_OUTPUT
+
+      - name: Install Rust 1.87.0
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.87.0
+          rustup target add x86_64-unknown-linux-gnu
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          source "$HOME/.cargo/env"
+
+      - name: Build release binary
+        run: cargo build --release --target x86_64-unknown-linux-gnu
+
+      - name: Create tar.gz archive
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          BIN_PATH="target/x86_64-unknown-linux-gnu/release/dconv"
+          ARCHIVE_NAME="dconv-${VERSION}-linux-x86_64.tar.gz"
+          tar -czvf "$(dirname "$BIN_PATH")/$ARCHIVE_NAME" -C "$(dirname "$BIN_PATH")" "$(basename "$BIN_PATH")"
+
+      - name: Upload to GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.get_version.outputs.version }}
+        run: |
+          ARCHIVE_PATH="target/x86_64-unknown-linux-gnu/release/dconv-${VERSION}-linux-x86_64.tar.gz"
+          TAG="v${VERSION}"
+          gh release upload "$TAG" "$ARCHIVE_PATH" --clobber

@@ -74,7 +74,7 @@ jobs:
           # Update sha256 in Formula
           sed -i.bak -E "s|^  sha256 \".*\"|  sha256 \"${SHA256}\"|" "$FORMULA_PATH"
           rm "$FORMULA_PATH.bak"
-          echo "Updated Formula/dconv.rb:"
+          echo "Updated Formula/dconv.rb"
           cat "$FORMULA_PATH"
 
       - name: Commit and push Formula update

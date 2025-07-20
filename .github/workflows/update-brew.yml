@@ -1,0 +1,17 @@
+name: Update Brew
+
+on:
+  workflow_dispatch:
+
+jobs:
+  update-brew:
+    name: Update Brew
+    runs-on: ubuntu-latest
+    steps:
+      - name: List commits from redru/homebrew-dconv
+        env:
+          HOMEBREW_DCONV_TOKEN: ${{ secrets.HOMEBREW_DCONV }}
+        run: |
+          curl -s -H "Authorization: token $HOMEBREW_DCONV_TOKEN" \
+            https://api.github.com/repos/redru/homebrew-dconv/commits \
+            | jq '.[].commit | {message, author, date: .author.date}' | head -20
